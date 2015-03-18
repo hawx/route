@@ -195,7 +195,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			// Try to fix the request path
 			if r.RedirectFixedPath {
 				fixedPath, found := root.findCaseInsensitivePath(
-					CleanPath(path),
+					cleanPath(path),
 					r.RedirectTrailingSlash,
 				)
 				if found {
