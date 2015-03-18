@@ -82,28 +82,6 @@ import (
 	"github.com/gorilla/context"
 )
 
-// Param is a single URL parameter, consisting of a key and a value.
-type Param struct {
-	Key   string
-	Value string
-}
-
-// Params is a Param-slice, as returned by the router.
-// The slice is ordered, the first URL parameter is also the first slice value.
-// It is therefore safe to read values by the index.
-type Params []Param
-
-// ByName returns the value of the first Param which key matches the given name.
-// If no matching Param is found, an empty string is returned.
-func (ps Params) ByName(name string) string {
-	for i := range ps {
-		if ps[i].Key == name {
-			return ps[i].Value
-		}
-	}
-	return ""
-}
-
 // Router is a http.Handler which can be used to dispatch requests to different
 // handler functions via configurable routes
 type Router struct {
@@ -187,7 +165,7 @@ func (r *Router) recv(w http.ResponseWriter, req *http.Request) {
 // If the path was found, it returns the handle function and the path parameter
 // values. Otherwise the third return value indicates whether a redirection to
 // the same path with an extra / without the trailing slash should be performed.
-func (r *Router) Lookup(path string) (http.Handler, Params, bool) {
+func (r *Router) Lookup(path string) (http.Handler, map[string]string, bool) {
 	if root := r.tree; root != nil {
 		return root.getValue(path)
 	}
@@ -251,9 +229,9 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 const varsKey = "__github.com/hawx/route:Vars__"
 
-func Vars(r *http.Request) Params {
+func Vars(r *http.Request) map[string]string {
 	if rv := context.Get(r, varsKey); rv != nil {
-		return rv.(Params)
+		return rv.(map[string]string)
 	}
 	return nil
 }
