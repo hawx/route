@@ -160,18 +160,6 @@ func (r *Router) recv(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// Lookup allows the manual lookup of a path.
-// This is e.g. useful to build a framework around this router.
-// If the path was found, it returns the handle function and the path parameter
-// values. Otherwise the third return value indicates whether a redirection to
-// the same path with an extra / without the trailing slash should be performed.
-func (r *Router) Lookup(path string) (http.Handler, map[string]string, bool) {
-	if root := r.tree; root != nil {
-		return root.getValue(path)
-	}
-	return nil, nil, false
-}
-
 // ServeHTTP makes the router implement the http.Handler interface.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if r.PanicHandler != nil {
