@@ -48,7 +48,32 @@ func TestRouter(t *testing.T) {
 	router := New()
 
 	routed := false
-	router.Handler("/user/:name", func(w http.ResponseWriter, r *http.Request, ps Params) {
+	router.HandleFunc("/user/:name", func(w http.ResponseWriter, r *http.Request) {
+		ps := Vars(r)
+		routed = true
+		want := Params{Param{"name", "gopher"}}
+		if !reflect.DeepEqual(ps, want) {
+			t.Fatalf("wrong wildcard values: want %v, got %v", want, ps)
+		}
+	})
+
+	w := new(mockResponseWriter)
+
+	req, _ := http.NewRequest("GET", "/user/gopher", nil)
+	router.ServeHTTP(w, req)
+
+	if !routed {
+		t.Fatal("routing failed")
+	}
+}
+
+func TestRouter2(t *testing.T) {
+	router := New()
+
+	routed := false
+	router.HandleFunc("/user/:name", func(w http.ResponseWriter, r *http.Request) {
+		ps := Vars(r)
+
 		routed = true
 		want := Params{Param{"name", "gopher"}}
 		if !reflect.DeepEqual(ps, want) {
@@ -103,7 +128,7 @@ func TestRouterAPI(t *testing.T) {
 func TestRouterRoot(t *testing.T) {
 	router := New()
 	recv := catchPanic(func() {
-		router.Handler("noSlashRoot", nil)
+		router.Handle("noSlashRoot", nil)
 	})
 	if recv == nil {
 		t.Fatal("registering path not beginning with '/' did not panic")
@@ -111,12 +136,12 @@ func TestRouterRoot(t *testing.T) {
 }
 
 func TestRouterNotFound(t *testing.T) {
-	handlerFunc := func(_ http.ResponseWriter, _ *http.Request, _ Params) {}
+	handlerFunc := func(_ http.ResponseWriter, _ *http.Request) {}
 
 	router := New()
-	router.Handler("/path", handlerFunc)
-	router.Handler("/dir/", handlerFunc)
-	router.Handler("/", handlerFunc)
+	router.HandleFunc("/path", handlerFunc)
+	router.HandleFunc("/dir/", handlerFunc)
+	router.HandleFunc("/", handlerFunc)
 
 	testRoutes := []struct {
 		route  string
@@ -156,7 +181,7 @@ func TestRouterNotFound(t *testing.T) {
 	}
 
 	// Test other method than GET (want 307 instead of 301)
-	router.Handler("/path2", handlerFunc)
+	router.HandleFunc("/path2", handlerFunc)
 	r, _ = http.NewRequest("PATCH", "/path/", nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, r)
@@ -166,7 +191,7 @@ func TestRouterNotFound(t *testing.T) {
 
 	// Test special case where no node for the prefix "/" exists
 	router = New()
-	router.Handler("/a", handlerFunc)
+	router.HandleFunc("/a", handlerFunc)
 	r, _ = http.NewRequest("GET", "/", nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, r)
@@ -183,7 +208,7 @@ func TestRouterPanicHandler(t *testing.T) {
 		panicHandled = true
 	}
 
-	router.Handler("/user/:name", func(_ http.ResponseWriter, _ *http.Request, _ Params) {
+	router.HandleFunc("/user/:name", func(_ http.ResponseWriter, _ *http.Request) {
 		panic("oops!")
 	})
 
@@ -205,7 +230,7 @@ func TestRouterPanicHandler(t *testing.T) {
 
 func TestRouterLookup(t *testing.T) {
 	routed := false
-	wantHandle := func(_ http.ResponseWriter, _ *http.Request, _ Params) {
+	wantHandle := func(_ http.ResponseWriter, _ *http.Request) {
 		routed = true
 	}
 	wantParams := Params{Param{"name", "gopher"}}
@@ -222,13 +247,13 @@ func TestRouterLookup(t *testing.T) {
 	}
 
 	// insert route and try again
-	router.Handler("/user/:name", wantHandle)
+	router.HandleFunc("/user/:name", wantHandle)
 
 	handle, params, tsr := router.Lookup("/user/gopher")
 	if handle == nil {
 		t.Fatal("Got no handle!")
 	} else {
-		handle(nil, nil, nil)
+		handle.ServeHTTP(nil, nil)
 		if !routed {
 			t.Fatal("Routing failed!")
 		}

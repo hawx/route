@@ -78,12 +78,9 @@ package route
 
 import (
 	"net/http"
-)
 
-// Handle is a function that can be registered to a route to handle HTTP
-// requests. Like http.HandlerFunc, but has a third parameter for the values of
-// wildcards (variables).
-type Handle func(http.ResponseWriter, *http.Request, Params)
+	"github.com/gorilla/context"
+)
 
 // Param is a single URL parameter, consisting of a key and a value.
 type Param struct {
@@ -155,7 +152,7 @@ func New() *Router {
 }
 
 // Handler registers a new request handle with the given path.
-func (r *Router) Handler(path string, handle Handle) {
+func (r *Router) Handle(path string, handle http.Handler) {
 	if path[0] != '/' {
 		panic("path must begin with '/'")
 	}
@@ -171,16 +168,6 @@ func (r *Router) Handler(path string, handle Handle) {
 	}
 
 	root.addRoute(path, handle)
-}
-
-// Handle is an adapter which allows the usage of an http.Handler as a
-// request handle.
-func (r *Router) Handle(path string, handler http.Handler) {
-	r.Handler(path,
-		func(w http.ResponseWriter, req *http.Request, _ Params) {
-			handler.ServeHTTP(w, req)
-		},
-	)
 }
 
 // HandleFunc is an adapter which allows the usage of an http.HandlerFunc as a
@@ -200,7 +187,7 @@ func (r *Router) recv(w http.ResponseWriter, req *http.Request) {
 // If the path was found, it returns the handle function and the path parameter
 // values. Otherwise the third return value indicates whether a redirection to
 // the same path with an extra / without the trailing slash should be performed.
-func (r *Router) Lookup(path string) (Handle, Params, bool) {
+func (r *Router) Lookup(path string) (http.Handler, Params, bool) {
 	if root := r.tree; root != nil {
 		return root.getValue(path)
 	}
@@ -217,7 +204,9 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		path := req.URL.Path
 
 		if handle, ps, tsr := root.getValue(path); handle != nil {
-			handle(w, req, ps)
+			setVars(req, ps)
+			defer context.Clear(req)
+			handle.ServeHTTP(w, req)
 			return
 		} else if req.Method != "CONNECT" && path != "/" {
 			code := 301 // Permanent redirect, request with GET method
@@ -258,4 +247,17 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	} else {
 		http.NotFound(w, req)
 	}
+}
+
+const varsKey = "__github.com/hawx/route:Vars__"
+
+func Vars(r *http.Request) Params {
+	if rv := context.Get(r, varsKey); rv != nil {
+		return rv.(Params)
+	}
+	return nil
+}
+
+func setVars(r *http.Request, val interface{}) {
+	context.Set(r, varsKey, val)
 }
