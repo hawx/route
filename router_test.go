@@ -129,7 +129,7 @@ func TestRouterNotFound(t *testing.T) {
 
 	// Test custom not found handler
 	var notFound bool
-	router.NotFound = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	router.NotFoundHandler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(404)
 		notFound = true
 	})
@@ -164,9 +164,9 @@ func TestRouterPanicHandler(t *testing.T) {
 	router := New()
 	panicHandled := false
 
-	router.PanicHandler = func(rw http.ResponseWriter, r *http.Request, p interface{}) {
+	router.PanicHandler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		panicHandled = true
-	}
+	})
 
 	router.HandleFunc("/user/:name", func(_ http.ResponseWriter, _ *http.Request) {
 		panic("oops!")

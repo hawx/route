@@ -83,13 +83,13 @@ type Router struct {
 
 	// Configurable http.Handler which is called when no matching route is
 	// found. If it is not set, http.NotFound is used.
-	NotFound http.Handler
+	NotFoundHandler http.Handler
 
 	// Function to handle panics recovered from http handlers. It should be used
 	// to generate a error page and return the http error code 500 (Internal
 	// Server Error). The handler can be used to keep your server from crashing
 	// because of unrecovered panics.
-	PanicHandler func(http.ResponseWriter, *http.Request, interface{})
+	PanicHandler http.Handler
 }
 
 // Default is the router instance used by the Handle and HandleFunc functions.
@@ -141,7 +141,7 @@ func (r *Router) HandleFunc(path string, handler http.HandlerFunc) {
 
 func (r *Router) recv(w http.ResponseWriter, req *http.Request) {
 	if rcv := recover(); rcv != nil {
-		r.PanicHandler(w, req, rcv)
+		r.PanicHandler.ServeHTTP(w, req)
 	}
 }
 
@@ -191,8 +191,8 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Handle 404
-	if r.NotFound != nil {
-		r.NotFound.ServeHTTP(w, req)
+	if r.NotFoundHandler != nil {
+		r.NotFoundHandler.ServeHTTP(w, req)
 	} else {
 		http.NotFound(w, req)
 	}
