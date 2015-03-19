@@ -129,10 +129,10 @@ func TestRouterNotFound(t *testing.T) {
 
 	// Test custom not found handler
 	var notFound bool
-	router.NotFound = func(rw http.ResponseWriter, r *http.Request) {
+	router.NotFound = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(404)
 		notFound = true
-	}
+	})
 	r, _ := http.NewRequest("GET", "/nope", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, r)

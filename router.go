@@ -192,7 +192,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// Handle 404
 	if r.NotFound != nil {
-		r.NotFound(w, req)
+		r.NotFound.ServeHTTP(w, req)
 	} else {
 		http.NotFound(w, req)
 	}
