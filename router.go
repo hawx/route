@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // in the LICENSE file.
 
-// Package httprouter is a trie based high performance HTTP request router.
+// Package route is a trie based high performance HTTP request router.
 //
 // A trivial example is:
 //
@@ -10,41 +10,40 @@
 //
 //  import (
 //      "fmt"
-//      "github.com/julienschmidt/httprouter"
+//      "github.com/hawx/route"
 //      "net/http"
 //      "log"
 //  )
 //
-//  func Index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+//  func Index(w http.ResponseWriter, r *http.Request) {
 //      fmt.Fprint(w, "Welcome!\n")
 //  }
 //
-//  func Hello(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-//      fmt.Fprintf(w, "hello, %s!\n", ps.ByName("name"))
+//  func Hello(w http.ResponseWriter, r *http.Request) {
+//      vars := route.Vars(r)
+//      fmt.Fprintf(w, "hello, %s!\n", vars["name"])
 //  }
 //
 //  func main() {
-//      router := httprouter.New()
-//      router.GET("/", Index)
-//      router.GET("/hello/:name", Hello)
+//      route.HandleFunc("/", Index)
+//      route.HandleFunc("/hello/:name", Hello)
 //
-//      log.Fatal(http.ListenAndServe(":8080", router))
+//      log.Fatal(http.ListenAndServe(":8080", route.Default))
 //  }
 //
-// The router matches incoming requests by the request method and the path.
-// If a handle is registered for this path and method, the router delegates the
-// request to that function.
-// For the methods GET, POST, PUT, PATCH and DELETE shortcut functions exist to
-// register handles, for all other methods router.Handle can be used.
+// The router matches incoming requests by the path. If a handle is registered
+// for this path the router delegates the request to that function.
 //
 // The registered path, against which the router matches incoming requests, can
 // contain two types of parameters:
+//
 //  Syntax    Type
 //  :name     named parameter
 //  *name     catch-all parameter
 //
 // Named parameters are dynamic path segments. They match anything until the
 // next '/' or the path end:
+//
 //  Path: /blog/:category/:post
 //
 //  Requests:
@@ -56,6 +55,7 @@
 // Catch-all parameters match anything until the path end, including the
 // directory index (the '/' before the catch-all). Since they match anything
 // until the end, catch-all paramerters must always be the final path element.
+//
 //  Path: /files/*filepath
 //
 //  Requests:
@@ -64,16 +64,10 @@
 //   /files/templates/article.html       match: filepath="/templates/article.html"
 //   /files                              no match, but the router would redirect
 //
-// The value of parameters is saved as a slice of the Param struct, consisting
-// each of a key and a value. The slice is passed to the Handle func as a third
-// parameter.
-// There are two ways to retrieve the value of a parameter:
-//  // by the name of the parameter
-//  user := ps.ByName("user") // defined by :user or *user
+// The value of parameters is saved as a map[string]string. To retrieve the
+// parameters for a request use the route.Vars function:
 //
-//  // by the index of the parameter. This way you can also get the name (key)
-//  thirdKey   := ps[2].Key   // the name of the 3rd parameter
-//  thirdValue := ps[2].Value // the value of the 3rd parameter
+//   vars := route.Vars(r)
 package route
 
 import (
@@ -87,24 +81,27 @@ import (
 type Router struct {
 	tree *node
 
-	// Configurable http.HandlerFunc which is called when no matching route is
+	// Configurable http.Handler which is called when no matching route is
 	// found. If it is not set, http.NotFound is used.
-	NotFound http.HandlerFunc
+	NotFound http.Handler
 
-	// Function to handle panics recovered from http handlers.
-	// It should be used to generate a error page and return the http error code
-	// 500 (Internal Server Error).
-	// The handler can be used to keep your server from crashing because of
-	// unrecovered panics.
+	// Function to handle panics recovered from http handlers. It should be used
+	// to generate a error page and return the http error code 500 (Internal
+	// Server Error). The handler can be used to keep your server from crashing
+	// because of unrecovered panics.
 	PanicHandler func(http.ResponseWriter, *http.Request, interface{})
 }
 
+// Default is the router instance used by the Handle and HandleFunc functions.
 var Default = New()
 
+// Handle registers the handler for the given path to the Default router.
 func Handle(path string, handler http.Handler) {
 	Default.Handle(path, handler)
 }
 
+// HandleFunc registers the handler function for the given path to the Default
+// router.
 func HandleFunc(path string, handler http.HandlerFunc) {
 	Default.HandleFunc(path, handler)
 }
@@ -117,7 +114,7 @@ func New() *Router {
 	return &Router{}
 }
 
-// Handler registers a new request handle with the given path.
+// Handler registers a new http.Handler with the given path.
 func (r *Router) Handle(path string, handle http.Handler) {
 	if path[0] != '/' {
 		panic("path must begin with '/'")
@@ -137,7 +134,7 @@ func (r *Router) Handle(path string, handle http.Handler) {
 }
 
 // HandleFunc is an adapter which allows the usage of an http.HandlerFunc as a
-// request handle.
+// handler.
 func (r *Router) HandleFunc(path string, handler http.HandlerFunc) {
 	r.Handle(path, handler)
 }
@@ -148,7 +145,7 @@ func (r *Router) recv(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// ServeHTTP makes the router implement the http.Handler interface.
+// ServeHTTP makes the Router implement the http.Handler interface.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if r.PanicHandler != nil {
 		defer r.recv(w, req)
@@ -203,6 +200,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 const varsKey = "__github.com/hawx/route:Vars__"
 
+// Vars retrieves the parameter matches for the given request.
 func Vars(r *http.Request) map[string]string {
 	if rv := context.Get(r, varsKey); rv != nil {
 		return rv.(map[string]string)
