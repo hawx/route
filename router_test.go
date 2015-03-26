@@ -1,189 +1,164 @@
-// Copyright 2013 Julien Schmidt. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be found
-// in the LICENSE file.
-
 package route
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
+	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-type mockResponseWriter struct{}
-
-func (m *mockResponseWriter) Header() (h http.Header) {
-	return http.Header{}
+type recordingHandler struct {
+	Vars map[string]string
+	Used bool
 }
 
-func (m *mockResponseWriter) Write(p []byte) (n int, err error) {
-	return len(p), nil
+func (h *recordingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.Used = true
+	h.Vars = Vars(r)
 }
-
-func (m *mockResponseWriter) WriteString(s string) (n int, err error) {
-	return len(s), nil
-}
-
-func (m *mockResponseWriter) WriteHeader(int) {}
 
 func TestRouter(t *testing.T) {
 	router := New()
 
-	routed := false
-	router.HandleFunc("/user/:name", func(w http.ResponseWriter, r *http.Request) {
-		ps := Vars(r)
-		routed = true
-		want := map[string]string{"name": "gopher"}
-		if !reflect.DeepEqual(ps, want) {
-			t.Fatalf("wrong wildcard values: want %v, got %v", want, ps)
-		}
-	})
+	handler := &recordingHandler{}
+	router.Handle("/user/:name", handler)
 
-	w := new(mockResponseWriter)
+	r, _ := http.NewRequest("GET", "/user/gopher", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
 
-	req, _ := http.NewRequest("GET", "/user/gopher", nil)
-	router.ServeHTTP(w, req)
-
-	if !routed {
-		t.Fatal("routing failed")
-	}
+	assert.True(t, handler.Used)
+	assert.Equal(t, map[string]string{"name": "gopher"}, handler.Vars)
 }
 
-type handlerStruct struct {
-	handeled *bool
-}
-
-func (h handlerStruct) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	*h.handeled = true
-}
-
-func TestRouterAPI(t *testing.T) {
-	var handler, handlerFunc bool
-
-	httpHandler := handlerStruct{&handler}
-
+func TestRouterRegisterWithHandleFunc(t *testing.T) {
 	router := New()
-	router.Handle("/Handler", httpHandler)
 	router.HandleFunc("/HandlerFunc", func(w http.ResponseWriter, r *http.Request) {
-		handlerFunc = true
+		w.WriteHeader(418)
 	})
 
-	w := new(mockResponseWriter)
-
-	r, _ := http.NewRequest("GET", "/Handler", nil)
+	r, _ := http.NewRequest("GET", "/HandlerFunc", nil)
+	w := httptest.NewRecorder()
 	router.ServeHTTP(w, r)
-	if !handler {
-		t.Error("routing Handler failed")
+
+	assert.Equal(t, 418, w.Code)
+}
+
+func TestRouterWithOverlappingRoutes(t *testing.T) {
+	router := New()
+
+	wildHandler := &recordingHandler{}
+	createHandler := &recordingHandler{}
+
+	router.Handle("/user/:name", wildHandler)
+	router.Handle("/user/create", createHandler)
+
+	r, _ := http.NewRequest("GET", "/user/gopher", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+
+	r, _ = http.NewRequest("GET", "/user/create", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+
+	assert.True(t, wildHandler.Used)
+	assert.Equal(t, map[string]string{"name": "gopher"}, wildHandler.Vars)
+
+	assert.True(t, createHandler.Used)
+	assert.Equal(t, map[string]string{}, createHandler.Vars)
+}
+
+func TestRouterUncleanPathRedirect(t *testing.T) {
+	router := New()
+
+	cases := map[string]string{
+		"/../what":                          "/what",
+		"/what/..":                          "/",
+		"/./what":                           "/what",
+		"/what/./":                          "/what/",
+		"///what":                           "/what",
+		"/what///":                          "/what/",
+		"///a///b///c///d///..///.///..///": "/a/b/",
 	}
 
-	r, _ = http.NewRequest("GET", "/HandlerFunc", nil)
-	router.ServeHTTP(w, r)
-	if !handlerFunc {
-		t.Error("routing HandlerFunc failed")
+	for reqpath, loc := range cases {
+		r, _ := http.NewRequest("GET", reqpath, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+
+		assert.Equal(t, 301, w.Code)
+		assert.Equal(t, loc, w.Header().Get("Location"))
 	}
 }
 
-func TestRouterRoot(t *testing.T) {
+func TestRouterUncleanPathRedirectDoesNotClearQuery(t *testing.T) {
 	router := New()
-	recv := catchPanic(func() {
-		router.Handle("noSlashRoot", nil)
-	})
-	if recv == nil {
-		t.Fatal("registering path not beginning with '/' did not panic")
-	}
+
+	r, _ := http.NewRequest("GET", "/test/../?val=5&thing=yeah", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+
+	assert.Equal(t, 301, w.Code)
+	assert.Equal(t, "/?val=5&thing=yeah", w.Header().Get("Location"))
+}
+
+func TestRouterUncleanPathDoNotRedirectConnectRequests(t *testing.T) {
+	router := New()
+
+	r, _ := http.NewRequest("CONNECT", "/../what", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+
+	assert.Equal(t, 404, w.Code)
 }
 
 func TestRouterNotFound(t *testing.T) {
-	handlerFunc := func(_ http.ResponseWriter, _ *http.Request) {}
-
 	router := New()
-	router.HandleFunc("/path", handlerFunc)
-	router.HandleFunc("/dir/", handlerFunc)
-	router.HandleFunc("/", handlerFunc)
 
-	testRoutes := []struct {
-		route  string
-		code   int
-		header string
-	}{
-		{"/path/", 301, "map[Location:[/path]]"},   // TSR -/
-		{"/dir", 301, "map[Location:[/dir/]]"},     // TSR +/
-		{"", 301, "map[Location:[/]]"},             // TSR +/
-		{"/PATH", 301, "map[Location:[/path]]"},    // Fixed Case
-		{"/DIR/", 301, "map[Location:[/dir/]]"},    // Fixed Case
-		{"/PATH/", 301, "map[Location:[/path]]"},   // Fixed Case -/
-		{"/DIR", 301, "map[Location:[/dir/]]"},     // Fixed Case +/
-		{"/../path", 301, "map[Location:[/path]]"}, // CleanPath
-		{"/nope", 404, ""},                         // NotFound
-	}
-	for _, tr := range testRoutes {
-		r, _ := http.NewRequest("GET", tr.route, nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, r)
-		if !(w.Code == tr.code && (w.Code == 404 || fmt.Sprint(w.Header()) == tr.header)) {
-			t.Errorf("NotFound handling route %s failed: Code=%d, Header=%v", tr.route, w.Code, w.Header())
-		}
-	}
-
-	// Test custom not found handler
-	var notFound bool
-	router.NotFoundHandler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.WriteHeader(404)
-		notFound = true
-	})
-	r, _ := http.NewRequest("GET", "/nope", nil)
+	r, _ := http.NewRequest("GET", "/nowhere", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, r)
-	if !(w.Code == 404 && notFound == true) {
-		t.Errorf("Custom NotFound handler failed: Code=%d, Header=%v", w.Code, w.Header())
-	}
 
-	// Test other method than GET (want 307 instead of 301)
-	router.HandleFunc("/path2", handlerFunc)
-	r, _ = http.NewRequest("PATCH", "/path/", nil)
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, r)
-	if !(w.Code == 307 && fmt.Sprint(w.Header()) == "map[Location:[/path]]") {
-		t.Errorf("Custom NotFound handler failed: Code=%d, Header=%v", w.Code, w.Header())
-	}
-
-	// Test special case where no node for the prefix "/" exists
-	router = New()
-	router.HandleFunc("/a", handlerFunc)
-	r, _ = http.NewRequest("GET", "/", nil)
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, r)
-	if !(w.Code == 404) {
-		t.Errorf("NotFound handling route / failed: Code=%d", w.Code)
-	}
+	assert.Equal(t, 404, w.Code)
 }
 
-func TestRouterPanicHandler(t *testing.T) {
+func TestRouterNotFoundHandlerSet(t *testing.T) {
 	router := New()
-	panicHandled := false
-
-	router.PanicHandler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		panicHandled = true
+	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(418)
 	})
 
-	router.HandleFunc("/user/:name", func(_ http.ResponseWriter, _ *http.Request) {
-		panic("oops!")
-	})
+	r, _ := http.NewRequest("GET", "/nowhere", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
 
-	w := new(mockResponseWriter)
-	req, _ := http.NewRequest("PUT", "/user/gopher", nil)
+	assert.Equal(t, 418, w.Code)
+}
 
-	defer func() {
-		if rcv := recover(); rcv != nil {
-			t.Fatal("handling panic failed")
-		}
+// comment the mutex code and run with go test -race to see fail
+func TestRouterConcurrentRegisterAndRouting(t *testing.T) {
+	router := New()
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	handler := &recordingHandler{}
+
+	// register
+	go func() {
+		router.Handle("/somepath", handler)
+		wg.Done()
 	}()
 
-	router.ServeHTTP(w, req)
+	// route
+	go func() {
+		r, _ := http.NewRequest("GET", "/somepath", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+		wg.Done()
+	}()
 
-	if !panicHandled {
-		t.Fatal("simulating failed")
-	}
+	wg.Wait()
+	assert.True(t, handler.Used)
 }

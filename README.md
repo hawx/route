@@ -1,41 +1,19 @@
 # route [![docs](http://godoc.org/github.com/hawx/route?status.png)](http://godoc.org/github.com/hawx/route)
 
-This is a fork of [github.com/julienschmidt/httprouter][httprouter], with the
-following aims/changes:
+A HTTP request router.
 
-- Use standard `http.Handler` types instead of a custom `Handle` type. This
-  meant using [github.com/gorilla/mux][gorilla/mux] style match retrieval. That
-  is, instead of passing the parameters into the handler they are retrieved
-  using a helper function, `route.Vars` here, from the `http.Request`.
+- Uses standard `http.Handler`s instead of a custom type.
 
-- Remove HTTP method matching.
+- Parameters, both single path segment "named" parameters and greedy
+  "catch-all" parameters.
 
-- Use `http.ServeMux` method names, so we have `route.Handle(http.Handler)` and
-  `route.HandleFunc(http.HandlerFunc)` as the only two ways of registering
-  handlers.
+- Allows overlapping route registrations, that is both `/user/create` and
+  `/user/:name` may be registered.
 
-- Use a `map[string]string` for parameter matches instead of a custom `Params`
-  type. This means we loose the strict ordering, but that is rarely required.
+- Corrects trailing slashes and redirects paths with superfluous elements
+  (e.g. `../`, `/./` and `//`).
 
-- Allow registering to a "default" router, as in the `net/http` package.
-
-- Remove static file server, just use `http.FileServer`.
-
-## features
-
-- **Trailing slash correction:** Auto redirects the client if a trailing slash
-  is missing, or one is given but not required. Of course it only does so, if
-  the new path has a handler.
-
-- **Path auto-correction:** Removes superfluous elements (like `../` or `//`). Also makes case-insensitive lookups.
-
-- **Parameters:** Define routes with parameters in.
-
-- **Catch panics:** Assign a `http.Handler` to `route.PanicHandler` to deal with
-  panics during request handling.
-
-- **Not Found handler:** Assign a `http.Handler` to `route.NotFoundHandler` to
-  perform custom actions when not found, otherwise uses `http.NotFound`.
+- A custom Not Found handler can be assigned.
 
 ## parameters
 
@@ -50,10 +28,6 @@ Pattern: /user/:user
  /user/gordon/profile      no match
  /user/                    no match
 ```
-
-**Note:** Since this router has only explicit matches, you can not register
-static routes and parameters for the same path segment. For example you can not
-register the patterns `/user/new` and `/user/:user` at the same time.
 
 A *catch-all parameter* has the form `*name` where "name" is the key used to
 retrieve it from the map. Catch-all parameters match everything including the
@@ -88,7 +62,3 @@ func main() {
   http.ListenAndServe(":8080", route.Default)
 }
 ```
-
-
-[httprouter]: https://github.com/julienschmidt/httprouter
-[gorilla/mux]: https://github.com/gorilla/mux
