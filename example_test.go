@@ -8,14 +8,14 @@ import (
 	"github.com/hawx/route"
 )
 
-func Example(w http.ResponseWriter, r *http.Request) {
+func Hello(w http.ResponseWriter, r *http.Request) {
 	vars := route.Vars(r)
 	fmt.Fprintf(w, "hello, %s!\n", vars["name"])
 }
 
-func main() {
+func Example() {
 	route.Handle("/", http.RedirectHandler("/hello/anon", http.StatusMovedPermanently))
-	route.HandleFunc("/hello/:name", Example)
+	route.HandleFunc("/hello/:name", Hello)
 
 	log.Fatal(http.ListenAndServe(":8080", route.Default))
 }
