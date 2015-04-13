@@ -1,4 +1,4 @@
-# route [![docs](http://godoc.org/github.com/hawx/route?status.png)](http://godoc.org/github.com/hawx/route)
+# route [![docs](http://godoc.org/github.com/hawx/route?status.svg)](http://godoc.org/github.com/hawx/route)
 
 A HTTP request router.
 
