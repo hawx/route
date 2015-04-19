@@ -79,7 +79,7 @@ func New() *Router {
 	return &Router{NotFoundHandler: http.NotFoundHandler(), tree: newLookup()}
 }
 
-// Handler registers the handler for the given path to the router.
+// Handle registers the handler for the given path to the router.
 func (r *Router) Handle(path string, handle http.Handler) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
