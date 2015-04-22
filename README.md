@@ -1,4 +1,4 @@
-# route [![docs](http://godoc.org/github.com/hawx/route?status.svg)](http://godoc.org/github.com/hawx/route)
+# route [![docs](http://godoc.org/hawx.me/code/route?status.svg)](http://godoc.org/hawx.me/code/route)
 
 A HTTP request router.
 
@@ -49,7 +49,7 @@ import (
   "fmt"
   "net/http"
 
-  "github.com/hawx/route"
+  "hawx.me/code/route"
 )
 
 func greetingHandler(w http.ResponseWriter, r *http.Request)) {

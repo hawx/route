@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/hawx/route"
+	"hawx.me/code/route"
 )
 
 func Hello(w http.ResponseWriter, r *http.Request) {
