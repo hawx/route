@@ -124,7 +124,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.NotFoundHandler.ServeHTTP(w, req)
 }
 
-const varsKey = "__github.com/hawx/route:Vars__"
+const varsKey = "__hawx.me/code/route:Vars__"
 
 // Vars retrieves the parameter matches for the given request.
 func Vars(r *http.Request) map[string]string {
