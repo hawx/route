@@ -202,3 +202,168 @@ func TestLookupPriorities(t *testing.T) {
 
 	checkExpectations(t, lookup, expectations)
 }
+
+type route struct {
+	method, path string
+}
+
+var (
+	gplusAPI = []route{
+		// People
+		{"GET", "/people/:userId"},
+		{"GET", "/people"},
+		{"GET", "/activities/:activityId/people/:collection"},
+		{"GET", "/people/:userId/people/:collection"},
+		{"GET", "/people/:userId/openIdConnect"},
+
+		// Activities
+		{"GET", "/people/:userId/activities/:collection"},
+		{"GET", "/activities/:activityId"},
+		{"GET", "/activities"},
+
+		// Comments
+		{"GET", "/activities/:activityId/comments"},
+		{"GET", "/comments/:commentId"},
+
+		// Moments
+		{"POST", "/people/:userId/moments/:collection"},
+		{"GET", "/people/:userId/moments/:collection"},
+		{"DELETE", "/moments/:id"},
+	}
+
+	parseAPI = []route{
+		// Objects
+		{"POST", "/1/classes/:className"},
+		{"GET", "/1/classes/:className/:objectId"},
+		{"PUT", "/1/classes/:className/:objectId"},
+		{"GET", "/1/classes/:className"},
+		{"DELETE", "/1/classes/:className/:objectId"},
+
+		// Users
+		{"POST", "/1/users"},
+		{"GET", "/1/login"},
+		{"GET", "/1/users/:objectId"},
+		{"PUT", "/1/users/:objectId"},
+		{"GET", "/1/users"},
+		{"DELETE", "/1/users/:objectId"},
+		{"POST", "/1/requestPasswordReset"},
+
+		// Roles
+		{"POST", "/1/roles"},
+		{"GET", "/1/roles/:objectId"},
+		{"PUT", "/1/roles/:objectId"},
+		{"GET", "/1/roles"},
+		{"DELETE", "/1/roles/:objectId"},
+
+		// Files
+		{"POST", "/1/files/:fileName"},
+
+		// Analytics
+		{"POST", "/1/events/:eventName"},
+
+		// Push Notifications
+		{"POST", "/1/push"},
+
+		// Installations
+		{"POST", "/1/installations"},
+		{"GET", "/1/installations/:objectId"},
+		{"PUT", "/1/installations/:objectId"},
+		{"GET", "/1/installations"},
+		{"DELETE", "/1/installations/:objectId"},
+
+		// Cloud Functions
+		{"POST", "/1/functions"},
+	}
+)
+
+func Benchmark_GPlusStatic(b *testing.B) {
+	benchRoute(b, gplusAPI, "/people")
+}
+
+func Benchmark_GPlusParam(b *testing.B) {
+	benchRoute(b, gplusAPI, "/people/118051310819094153327")
+}
+
+func Benchmark_GPlus2Params(b *testing.B) {
+	benchRoute(b, gplusAPI, "/people/118051310819094153327/activities/123456789")
+}
+
+func Benchmark_GPlusAll(b *testing.B) {
+	benchRoutes(b, gplusAPI)
+}
+
+func Benchmark_ParseStatic(b *testing.B) {
+	benchRoute(b, parseAPI, "/1/users")
+}
+
+func Benchmark_ParseParam(b *testing.B) {
+	benchRoute(b, parseAPI, "/1/classes/go")
+}
+
+func Benchmark_Parse2Params(b *testing.B) {
+	benchRoute(b, parseAPI, "/1/classes/go/123456789")
+}
+
+func Benchmark_ParseAll(b *testing.B) {
+	benchRoutes(b, parseAPI)
+}
+
+func benchRoute(b *testing.B, routes []route, url string) {
+	router := New()
+
+	for _, route := range routes {
+		router.Handle(route.path, registeredHandler{route.path})
+	}
+
+	r, _ := http.NewRequest("GET", url, nil)
+	w := new(mockResponseWriter)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		router.ServeHTTP(w, r)
+	}
+}
+
+func benchRoutes(b *testing.B, routes []route) {
+	router := New()
+
+	for _, route := range routes {
+		router.Handle(route.path, registeredHandler{route.path})
+	}
+
+	w := new(mockResponseWriter)
+	r, _ := http.NewRequest("GET", "/", nil)
+	u := r.URL
+	rq := u.RawQuery
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, route := range routes {
+			r.Method = route.method
+			r.RequestURI = route.path
+			u.Path = route.path
+			u.RawQuery = rq
+			router.ServeHTTP(w, r)
+		}
+	}
+}
+
+type mockResponseWriter struct{}
+
+func (m *mockResponseWriter) Header() (h http.Header) {
+	return http.Header{}
+}
+
+func (m *mockResponseWriter) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+func (m *mockResponseWriter) WriteString(s string) (n int, err error) {
+	return len(s), nil
+}
+
+func (m *mockResponseWriter) WriteHeader(int) {}
