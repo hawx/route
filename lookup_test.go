@@ -318,7 +318,6 @@ func benchRoute(b *testing.B, routes []route, url string) {
 	r, _ := http.NewRequest("GET", url, nil)
 	w := new(mockResponseWriter)
 
-	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -338,7 +337,6 @@ func benchRoutes(b *testing.B, routes []route) {
 	u := r.URL
 	rq := u.RawQuery
 
-	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
