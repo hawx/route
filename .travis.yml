@@ -1,0 +1,6 @@
+go_import_path: hawx.me/code/route
+
+language: go
+
+notifications:
+  email: false
