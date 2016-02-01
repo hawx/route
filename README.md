@@ -3,16 +3,12 @@
 A HTTP request router.
 
 - Uses standard `http.Handler`s instead of a custom type.
-
 - Parameters, both single path segment "named" parameters and greedy
   "catch-all" parameters.
-
 - Allows overlapping route registrations, that is both `/user/create` and
   `/user/:name` may be registered.
-
 - Corrects trailing slashes and redirects paths with superfluous elements
   (e.g. `../`, `/./` and `//`).
-
 - A custom Not Found handler can be assigned.
 
 ## parameters
@@ -21,12 +17,13 @@ A *named parameter* has the form `:name` where "name" is the key used to
 retrieve it from the map. Named parameters only match a single path segment:
 
 ```
-Pattern: /user/:user
+Path: /blog/:category/:post
 
- /user/gordon              match (user=gordon)
- /user/you                 match (user=you)
- /user/gordon/profile      no match
- /user/                    no match
+Requests:
+ /blog/go/request-routers            match: category="go", post="request-routers"
+ /blog/go/request-routers/           redirect to /blog/go/request-routers
+ /blog/go/                           no match
+ /blog/go/request-routers/comments   no match
 ```
 
 A *catch-all parameter* has the form `*name` where "name" is the key used to
@@ -34,11 +31,13 @@ retrieve it from the map. Catch-all parameters match everything including the
 preceeding "/", so must always be at the end of the pattern.
 
 ```
-Pattern: /src/*filepath
+Path: /files/*filepath
 
- /src/                     match (filepath="/")
- /src/somefile.go          match (filepath="/somefile.go")
- /src/subdir/somefile.go   match (filepath="/subdir/somefile.go")
+Requests:
+ /files/                             match: filepath=""
+ /files/LICENSE                      match: filepath="LICENSE"
+ /files/templates/article.html       match: filepath="templates/article.html"
+ /files                              match: filepath=""
 ```
 
 Parameters can be retrieved in handlers by calling `route.Vars(*http.Request)
