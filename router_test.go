@@ -46,6 +46,23 @@ func TestRouterRegisterWithHandleFunc(t *testing.T) {
 	assert.Equal(t, 418, w.Code)
 }
 
+func TestRouterWithEncodedPath(t *testing.T) {
+	arg := ""
+
+	router := New()
+	router.HandleFunc("/Handle+%2B/:arg", func(w http.ResponseWriter, r *http.Request) {
+		arg = Vars(r)["arg"]
+		w.WriteHeader(418)
+	})
+
+	r, _ := http.NewRequest("GET", "/Handle+%2B/Something+%2B+Something", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+
+	assert.Equal(t, 418, w.Code)
+	assert.Equal(t, "Something+%2B+Something", arg)
+}
+
 func TestRouterWithOverlappingRoutes(t *testing.T) {
 	router := New()
 

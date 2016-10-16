@@ -100,7 +100,7 @@ func (r *Router) HandleFunc(path string, handler http.HandlerFunc) {
 // ServeHTTP dispatches the request to appropriate handler, if none can be found
 // NotFoundHandler is used.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	path := req.URL.Path
+	path := req.URL.EscapedPath()
 
 	if req.Method != "CONNECT" {
 		if cleanpath := cleanPath(path); cleanpath != path {
