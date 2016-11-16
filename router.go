@@ -40,10 +40,9 @@
 package route
 
 import (
+	"context"
 	"net/http"
 	"sync"
-
-	"github.com/gorilla/context"
 )
 
 // Router is a http.Handler which can be used to dispatch requests to different
@@ -115,9 +114,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	defer r.mu.RUnlock()
 
 	if handle, ps := r.tree.Get(path); handle != nil {
-		setVars(req, ps)
-		defer context.Clear(req)
-		handle.ServeHTTP(w, req)
+		handle.ServeHTTP(w, req.WithContext(context.WithValue(req.Context(), varsKey, ps)))
 		return
 	}
 
@@ -128,12 +125,9 @@ const varsKey = "__hawx.me/code/route:Vars__"
 
 // Vars retrieves the parameter matches for the given request.
 func Vars(r *http.Request) map[string]string {
-	if rv := context.Get(r, varsKey); rv != nil {
+	if rv := r.Context().Value(varsKey); rv != nil {
 		return rv.(map[string]string)
 	}
-	return nil
-}
 
-func setVars(r *http.Request, val interface{}) {
-	context.Set(r, varsKey, val)
+	return nil
 }
