@@ -8,9 +8,10 @@ import (
 	"hawx.me/code/route"
 )
 
-func Hello(w http.ResponseWriter, r *http.Request) {
+func Hello(w http.ResponseWriter, r *http.Request) error {
 	vars := route.Vars(r)
 	fmt.Fprintf(w, "hello, %s!\n", vars["name"])
+	return nil
 }
 
 func Example() {

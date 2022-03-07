@@ -1,7 +1,6 @@
 package route
 
 import (
-	"net/http"
 	"path"
 	"strings"
 )
@@ -11,16 +10,16 @@ import (
 The idea here is that any path, say /user/me/create, can be simply turned
 into a tree by splitting on '/' and using these as names for the edges:
 
-  ( ) --[user]--> ( ) --[me]--> ( ) --[create]--> (http.Handler)
+	( ) --[user]--> ( ) --[me]--> ( ) --[create]--> (Handler)
 
 We can then add other branches, like /user/me and /user/me/edit:
 
-  ( ) --[user]--> ( ) --[me]--> (http.Handler) --[create]--> (http.Handler)
-                                      |
-                                      | --[edit]--> (http.Handler)
+	( ) --[user]--> ( ) --[me]--> (Handler) --[create]--> (Handler)
+																			|
+																			| --[edit]--> (Handler)
 
 And now to retrieve a particular handler we can take the request path /user/me,
-split on '/', and traverse the tree to get the http.Handler.
+split on '/', and traverse the tree to get the Handler.
 
 Now let's say instead of /user/me/create we use a parameter to get
 /user/:name/create. Now instead of using an "exact" edge -- one where we can
@@ -35,9 +34,9 @@ wild matches have failed.
 
 There is one interesting edge case to discuss. Consider the following tree.
 
-  ( ) --[image]--> ( ) --[my]--> ( ) --[photo.jpg]--> (http.Handler)
-                    |
-                    |--[*path]--> (http.Handler)
+	( ) --[image]--> ( ) --[my]--> ( ) --[photo.jpg]--> (Handler)
+										|
+										|--[*path]--> (Handler)
 
 For a path like /image/my/cat.gif we would start by following the image->my
 edges but then hit a dead-end, when in fact we could have matched
@@ -67,7 +66,7 @@ type node struct {
 	greedyleaf *greedyleaf
 
 	// value contains the handler, if any.
-	value http.Handler
+	value Handler
 }
 
 type wildedge struct {
@@ -80,13 +79,13 @@ type wildedge struct {
 
 type greedyleaf struct {
 	// value contain the handler.
-	value http.Handler
+	value Handler
 
 	// name of parameter
 	name string
 }
 
-func (look *treeLookup) Add(path string, handler http.Handler) {
+func (look *treeLookup) Add(path string, handler Handler) {
 	if path != "/" && strings.HasSuffix(path, "/") {
 		panic("cannot insert path with trailing slash: " + path)
 	}
@@ -96,7 +95,7 @@ func (look *treeLookup) Add(path string, handler http.Handler) {
 	look.root.add(parts, handler)
 }
 
-func (curr *node) add(parts []string, handler http.Handler) {
+func (curr *node) add(parts []string, handler Handler) {
 	part := parts[0]
 	parts = parts[1:]
 
@@ -148,7 +147,7 @@ func (curr *node) add(parts []string, handler http.Handler) {
 	child.value = handler
 }
 
-func (look *treeLookup) Get(path string) (http.Handler, map[string]string) {
+func (look *treeLookup) Get(path string) (Handler, map[string]string) {
 	params := map[string]string{}
 
 	if path != "/" && strings.HasSuffix(path, "/") {
@@ -160,7 +159,7 @@ func (look *treeLookup) Get(path string) (http.Handler, map[string]string) {
 	return look.root.get(parts, params)
 }
 
-func (curr *node) get(parts []string, pars map[string]string) (http.Handler, map[string]string) {
+func (curr *node) get(parts []string, pars map[string]string) (Handler, map[string]string) {
 	if len(parts) == 0 {
 		// If it has a greedyleaf we have an empty match
 		if curr.greedyleaf != nil {

@@ -11,7 +11,8 @@ type registeredHandler struct {
 	val string
 }
 
-func (r registeredHandler) ServeHTTP(http.ResponseWriter, *http.Request) {}
+func (r registeredHandler) ServeHTTP(http.ResponseWriter, *http.Request)            {}
+func (r registeredHandler) ServeErrorHTTP(http.ResponseWriter, *http.Request) error { return nil }
 
 func register(lookup *treeLookup, route string) http.Handler {
 	handler := registeredHandler{route}

@@ -45,12 +45,41 @@ import (
 	"sync"
 )
 
+type Handler interface {
+	http.Handler
+	ServeErrorHTTP(w http.ResponseWriter, r *http.Request) error
+}
+
+type HandlerFunc func(w http.ResponseWriter, r *http.Request) error
+
+func (h HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if err := h(w, r); err != nil {
+		panic(err)
+	}
+}
+
+func (h HandlerFunc) ServeErrorHTTP(w http.ResponseWriter, r *http.Request) error {
+	return h(w, r)
+}
+
+type nilErrorHandler struct {
+	http.Handler
+}
+
+func (h nilErrorHandler) ServeErrorHTTP(w http.ResponseWriter, r *http.Request) error {
+	h.ServeHTTP(w, r)
+	return nil
+}
+
 // Router is a http.Handler which can be used to dispatch requests to different
 // handler functions via configurable routes
 type Router struct {
-	// Configurable http.Handler which is called when no matching route is
-	// found. By default it is set to http.NotFoundHandler().
+	// NotFoundHandler is called when no matching route is found. By default it is
+	// set to http.NotFoundHandler().
 	NotFoundHandler http.Handler
+
+	// ErrorHandler is called if an error is raised by any handler.
+	ErrorHandler func(w http.ResponseWriter, r *http.Request, err error)
 
 	mu   sync.RWMutex
 	tree *treeLookup
@@ -66,7 +95,7 @@ func Handle(path string, handler http.Handler) {
 
 // HandleFunc registers the handler function for the given path to the Default
 // router.
-func HandleFunc(path string, handler http.HandlerFunc) {
+func HandleFunc(path string, handler HandlerFunc) {
 	Default.HandleFunc(path, handler)
 }
 
@@ -75,7 +104,11 @@ var _ http.Handler = New()
 
 // New returns an initialized Router.
 func New() *Router {
-	return &Router{NotFoundHandler: http.NotFoundHandler(), tree: newLookup()}
+	return &Router{
+		NotFoundHandler: http.NotFoundHandler(),
+		ErrorHandler:    func(w http.ResponseWriter, r *http.Request, err error) {},
+		tree:            newLookup(),
+	}
 }
 
 // Handle registers the handler for the given path to the router.
@@ -87,13 +120,26 @@ func (r *Router) Handle(path string, handle http.Handler) {
 		panic("path must begin with '/'")
 	}
 
-	r.tree.Add(path, handle)
+	switch v := handle.(type) {
+	case Handler:
+		r.tree.Add(path, v)
+	case http.Handler:
+		r.tree.Add(path, nilErrorHandler{v})
+	}
 }
 
-// HandleFunc registers the handler function for the given path to the Default
-// router.
-func (r *Router) HandleFunc(path string, handler http.HandlerFunc) {
-	r.Handle(path, handler)
+// HandleFunc registers the handler function (either `func(http.ResponseWriter,
+// *http.Request)` or `func(http.ResponseWriter, *http.Request) error`) for the
+// given path to the Default router.
+func (r *Router) HandleFunc(path string, handler interface{}) {
+	switch v := handler.(type) {
+	case func(http.ResponseWriter, *http.Request) error:
+		r.Handle(path, HandlerFunc(v))
+	case func(http.ResponseWriter, *http.Request):
+		r.Handle(path, http.HandlerFunc(v))
+	default:
+		panic("tried to register unhandleable func type with HandleFunc")
+	}
 }
 
 // ServeHTTP dispatches the request to appropriate handler, if none can be found
@@ -114,18 +160,22 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	defer r.mu.RUnlock()
 
 	if handle, ps := r.tree.Get(path); handle != nil {
-		handle.ServeHTTP(w, req.WithContext(context.WithValue(req.Context(), varsKey, ps)))
+		req = req.WithContext(context.WithValue(req.Context(), varsKey{}, ps))
+		err := handle.ServeErrorHTTP(w, req)
+		if err != nil {
+			r.ErrorHandler(w, req, err)
+		}
 		return
 	}
 
 	r.NotFoundHandler.ServeHTTP(w, req)
 }
 
-const varsKey = "__hawx.me/code/route:Vars__"
+type varsKey struct{}
 
 // Vars retrieves the parameter matches for the given request.
 func Vars(r *http.Request) map[string]string {
-	if rv := r.Context().Value(varsKey); rv != nil {
+	if rv := r.Context().Value(varsKey{}); rv != nil {
 		return rv.(map[string]string)
 	}
 

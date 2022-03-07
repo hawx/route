@@ -1,10 +1,12 @@
 package route
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -33,10 +35,24 @@ func TestRouter(t *testing.T) {
 	assert.Equal(t, map[string]string{"name": "gopher"}, handler.Vars)
 }
 
-func TestRouterRegisterWithHandleFunc(t *testing.T) {
+func TestRouterRegisterWithHttpHandleFunc(t *testing.T) {
 	router := New()
 	router.HandleFunc("/HandlerFunc", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(418)
+	})
+
+	r, _ := http.NewRequest("GET", "/HandlerFunc", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+
+	assert.Equal(t, 418, w.Code)
+}
+
+func TestRouterRegisterWithHandleFunc(t *testing.T) {
+	router := New()
+	router.HandleFunc("/HandlerFunc", func(w http.ResponseWriter, r *http.Request) error {
+		w.WriteHeader(418)
+		return nil
 	})
 
 	r, _ := http.NewRequest("GET", "/HandlerFunc", nil)
@@ -61,6 +77,31 @@ func TestRouterWithEncodedPath(t *testing.T) {
 
 	assert.Equal(t, 418, w.Code)
 	assert.Equal(t, "Something+%2B+Something", arg)
+}
+
+func TestRouterErrorHandler(t *testing.T) {
+	errCh := make(chan error, 1)
+	expectedErr := errors.New("what")
+
+	router := New()
+	router.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		errCh <- err
+	}
+
+	router.HandleFunc("/HandlerFunc", func(w http.ResponseWriter, r *http.Request) error {
+		return expectedErr
+	})
+
+	r, _ := http.NewRequest("GET", "/HandlerFunc", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+
+	select {
+	case err := <-errCh:
+		assert.Equal(t, expectedErr, err)
+	case <-time.After(time.Millisecond):
+		assert.Fail(t, "expected error")
+	}
 }
 
 func TestRouterWithOverlappingRoutes(t *testing.T) {
