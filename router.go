@@ -88,13 +88,13 @@ type Router struct {
 var Default = New()
 
 // Handle registers the handler for the given path to the Default router.
-func Handle(path string, handler http.Handler) {
+func Handle(path string, handler interface{}) {
 	Default.Handle(path, handler)
 }
 
 // HandleFunc registers the handler function for the given path to the Default
 // router.
-func HandleFunc(path string, handler HandlerFunc) {
+func HandleFunc(path string, handler interface{}) {
 	Default.HandleFunc(path, handler)
 }
 
@@ -111,7 +111,7 @@ func New() *Router {
 }
 
 // Handle registers the handler for the given path to the router.
-func (r *Router) Handle(path string, handle http.Handler) {
+func (r *Router) Handle(path string, handle interface{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -124,6 +124,8 @@ func (r *Router) Handle(path string, handle http.Handler) {
 		r.tree.Add(path, v)
 	case http.Handler:
 		r.tree.Add(path, nilErrorHandler{v})
+	default:
+		panic("tried to register unhandleable type with Handle")
 	}
 }
 
