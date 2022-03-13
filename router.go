@@ -46,7 +46,6 @@ import (
 )
 
 type Handler interface {
-	http.Handler
 	ServeErrorHTTP(w http.ResponseWriter, r *http.Request) error
 }
 
